@@ -5,6 +5,7 @@
   id
   multiple-choice?
   dropdown?
+  mandatory?
   options)
 
 ;; User configurable parameters
@@ -16,34 +17,39 @@
   (make-parameter
    '(p "Thanks for participating in the survey.")))
 
+;; Internal parameters
+(define %survey-answers (make-parameter '()))
+
 ;; User widgets
 (define *survey-widgets* '())
 
 (define (add-survey-widget . args)
-  (let ((survey-widget (apply make-survey-widget args)))
-    (set! *survey-widgets*
-          (cons (cons (car args) survey-widget)
-                *survey-widgets*))
-    survey-widget))
+  (if *form-loaded?*
+      (alist-ref (car args) *survey-widgets*)
+      (let ((survey-widget (apply make-survey-widget args)))
+        (set! *survey-widgets*
+              (cons (cons (car args) survey-widget)
+                    *survey-widgets*))
+        survey-widget)))
 
-(define (multiple-choices id options)
+(define (multiple-choices id options #!key (mandatory? #t))
   (register-options! id options)
-  (render-options (add-survey-widget id #t #f options)))
+  (render-options (add-survey-widget id #t #f mandatory? options)))
 
-(define (single-choice id options)
+(define (single-choice id options #!key (mandatory? #t))
   (register-options! id options)
-  (render-options (add-survey-widget id #f #f options)))
+  (render-options (add-survey-widget id #f #f mandatory? options)))
 
-(define (single-choice/dropdown id options)
+(define (single-choice/dropdown id options #!key (mandatory? #t))
   (register-options! id options)
-  (render-options (add-survey-widget id #f #t options)))
+  (render-options (add-survey-widget id #f #t mandatory? options)))
 
-(define (text-box id)
-  (render-text-box (add-survey-widget id #f #f #f)))
+(define (text-box id #!key (mandatory? #t))
+  (render-text-box (add-survey-widget id #f #f mandatory? #f)))
 
-(define (text-box/multiline id)
+(define (text-box/multiline id #!key (mandatory? #t))
   ;; hack: use multiple-choice? to indicate multiline
-  (render-text-box (add-survey-widget id #f #f #f)))
+  (render-text-box (add-survey-widget id #f #f mandatory? #f)))
 
 
 ;; Internal stuff
@@ -51,14 +57,17 @@
   ;; ((hash name text) ...)
   '())
 
+(define *form-loaded?* #f)
+
 (define (register-option! name option)
-  (let ((hash (string->sha1sum (sprintf "i~a-~a" name option))))
-    (when (alist-ref hash *options* equal?)
-      (error 'register-option
-             (sprintf "Hash ~a for ~a ~a exists."
-                      hash name option)))
-    (set! *options* (cons (list hash name option)
-                          *options*))))
+  (unless *form-loaded?*
+    (let ((hash (string->sha1sum (sprintf "i~a-~a" name option))))
+      (when (alist-ref hash *options* equal?)
+        (error 'register-option
+               (sprintf "Hash ~a for ~a ~a exists."
+                        hash name option)))
+      (set! *options* (cons (list hash name option)
+                            *options*)))))
 
 (define (register-options! name options)
   (for-each (lambda (option)
@@ -79,21 +88,34 @@
 (define (combo-box name options)
   `(select (@ (name ,name) (id ,name))
            ,(map (lambda (option)
-                   `(option (@ (value ,(option-hash name option)))
+                   `(option (@ (value ,(option-hash name option))
+                               ,(if (equal? option (answer-by-id name))
+                                    '(selected)
+                                    '()))
                             ,option))
                  (cons "" options))))
 
+(define (option-checked? id option multiple-choice?)
+  ((if multiple-choice? member equal?)
+   option
+   (or (answer-by-id id)
+       (if multiple-choice? '() #f))))
+
 (define (render-options survey-widget)
   (let ((id (survey-widget-id survey-widget))
-        (options (survey-widget-options survey-widget)))
+        (options (survey-widget-options survey-widget))
+        (multiple-choice? (survey-widget-multiple-choice? survey-widget)))
     (if (survey-widget-dropdown? survey-widget)
         (combo-box id options)
         (map (lambda (option)
-               `((input (@ (type ,(if (survey-widget-multiple-choice? survey-widget)
+               `((input (@ (type ,(if multiple-choice?
                                       "checkbox"
                                       "radio"))
                            (name ,id)
                            (id ,id)
+                           ,(if (option-checked? id option multiple-choice?)
+                                '(checked)
+                                '())
                            (value ,(option-hash id option)))
                         ,option)
                  (br)))
@@ -102,41 +124,66 @@
 (define (render-text-box survey-widget)
   (let ((id (survey-widget-id survey-widget)))
     (if (survey-widget-multiple-choice? survey-widget)
-        `(textarea (@ (name ,id) (id ,id)))
-        `(input (@ (type "text") (name ,id) (id ,id))))))
+        `(textarea (@ (name ,id)
+                      (id ,id))
+                   ,(or (answer-by-id id) ""))
+        `(input (@ (type "text")
+                   (name ,id)
+                   (id ,id)
+                   (value ,(or (answer-by-id id) "")))))))
 
-(define (render-survey)
-   `(div (@ (id "content"))
-         (h1 ,(survey-title))
-         (form (@ (method "post")
-                  (action ,(make-pathname (app-root-path) "submit")))
-               ,(survey)
-               (p (input (@ (type "submit")))))))
+(define (render-survey base-path)
+  (let ((content
+         `(div (@ (id "content"))
+               (h1 ,(survey-title))
+               (form (@ (method "post")
+                        (action ,base-path))
+                     ,((survey))
+                     (p (input (@ (type "submit"))))))))
+    (set! *form-loaded?* #t)
+    content))
 
 (define (render-survey-end)
   `(div (@ (id "content"))
         (h1 ,(survey-title))
         ,(survey-end)))
 
-(define (save-survey-answers data-dir)
+(define (answers-from-request)
+  (map (lambda (widget)
+         (let* ((id (survey-widget-id widget))
+                (val ($ id (nonempty
+                            (if (survey-widget-multiple-choice? widget)
+                                as-list
+                                as-string)))))
+           (cons id (if (survey-widget-options widget)
+                        (if (list? val)
+                            (map option-text val)
+                            (option-text val))
+                        val))))
+       (reverse (map cdr *survey-widgets*))))
+
+(define (answer-by-id id)
+  (alist-ref id (%survey-answers)))
+
+(define (form-submission-ok? answers)
+  (let loop ((answers answers))
+    (if (null? answers)
+        #t
+        (let* ((var (caar answers))
+               (val (cdar answers))
+               (widget (alist-ref var *survey-widgets*)))
+          (if (and (survey-widget-mandatory? widget)
+                   (not val))
+              #f
+              (loop (cdr answers)))))))
+
+(define (save-survey-answers data-dir answers)
   (let ((out-file
          (make-pathname data-dir
                         (sprintf "~a-~a-~a.scm"
                                  (remote-address)
                                  (current-milliseconds)
-                                 (random 1000))))
-        (answers
-         (map (lambda (widget)
-                (let* ((id (survey-widget-id widget))
-                       (val ($ id (if (survey-widget-multiple-choice? widget)
-                                      as-list
-                                      as-string))))
-                  (cons id (if (survey-widget-options widget)
-                               (if (list? val)
-                                   (map option-text val)
-                                   (option-text val))
-                               val))))
-              (reverse (map cdr *survey-widgets*)))))
+                                 (random 1000)))))
     (with-output-to-file out-file
       (lambda ()
         (for-each pp answers)))
@@ -162,12 +209,15 @@
         method: method))
 
     (define-survey-page base-path
-      render-survey)
-
-    (define-survey-page "submit"
       (lambda ()
-        (save-survey-answers data-dir)
-        (render-survey-end))
-      method: 'post)
+        (let ((answers (answers-from-request)))
+          (if (and (not (null? *survey-widgets*))
+                   (form-submission-ok? answers))
+              (begin
+                (save-survey-answers data-dir answers)
+                (render-survey-end))
+              (parameterize ((%survey-answers answers))
+                (render-survey base-path)))))
+      method: '(get post head))
 
     ))
