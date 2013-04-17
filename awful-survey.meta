@@ -1,0 +1,6 @@
+;; -*- scheme -*-
+((synopsis "An awful app to make web surveys")
+ (author "Mario Domenech Goulart")
+ (category web)
+ (license "BSD")
+ (depends awful))

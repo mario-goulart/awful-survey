@@ -1,0 +1,13 @@
+This is an awful (http://wiki.call-cc.org/egg/awful) application to
+help making web surveys.
+
+Surveys are specified in SXML. awful-survey provides some handy
+procedures that generate SXML code for common survey widgets.
+
+To see it in action, run the example application:
+
+    $ cd awful-survey
+    $ chicken-install
+    $ awful awful-survey-app.scm
+
+Then request http://localhost:8080 on your browser

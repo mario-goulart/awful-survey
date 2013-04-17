@@ -1,0 +1,8 @@
+;; -*- scheme -*-
+(compile -d0 -O3 -J -s awful-survey.scm)
+(compile -d0 -O3 -s awful-survey.import.scm)
+
+(install-extension
+ 'awful-survey
+ '("awful-survey.so" "awful-survey.import.so")
+ '((version "0.0.1")))
