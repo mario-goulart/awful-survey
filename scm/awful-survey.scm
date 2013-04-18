@@ -56,7 +56,7 @@
 
 (define (text-box/multiline id #!key (mandatory? #t))
   ;; hack: use multiple-choice? to indicate multiline
-  (render-text-box (add-survey-widget id #f #f mandatory? #f)))
+  (render-text-box (add-survey-widget id #t #f mandatory? #f)))
 
 
 ;; Internal stuff
