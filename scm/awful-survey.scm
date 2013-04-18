@@ -1,4 +1,4 @@
-(use awful spiffy simple-sha1)
+(use awful spiffy simple-sha1 intarweb)
 (use data-structures srfi-1 srfi-13 extras posix files)
 
 (define-record survey-widget
@@ -16,6 +16,13 @@
 (define survey-end
   (make-parameter
    '(p "Thanks for participating in the survey.")))
+
+(define missing-field-highlighter
+  (make-parameter
+   (lambda (id widget-sxml)
+     `(span (@ (class "missing-field"))
+            ,widget-sxml))))
+
 
 ;; Internal parameters
 (define %survey-answers (make-parameter '()))
@@ -85,6 +92,17 @@
                            *options*)))
     (car option)))
 
+(define (field-missing? widget)
+  (and (eq? 'POST (request-method (current-request)))
+       (survey-widget-mandatory? widget)
+       (not (answer-by-id (survey-widget-id widget)))))
+
+(define (wrap-widget id widget-sxml)
+  (let ((widget (alist-ref id *survey-widgets*)))
+    (if (field-missing? widget)
+        ((missing-field-highlighter) id widget-sxml)
+        widget-sxml)))
+
 (define (combo-box name options)
   `(select (@ (name ,name) (id ,name))
            ,(map (lambda (option)
@@ -105,32 +123,36 @@
   (let ((id (survey-widget-id survey-widget))
         (options (survey-widget-options survey-widget))
         (multiple-choice? (survey-widget-multiple-choice? survey-widget)))
-    (if (survey-widget-dropdown? survey-widget)
-        (combo-box id options)
-        (map (lambda (option)
-               `((input (@ (type ,(if multiple-choice?
-                                      "checkbox"
-                                      "radio"))
-                           (name ,id)
-                           (id ,id)
-                           ,(if (option-checked? id option multiple-choice?)
-                                '(checked)
-                                '())
-                           (value ,(option-hash id option)))
-                        ,option)
-                 (br)))
-             options))))
+    (wrap-widget
+     id
+     (if (survey-widget-dropdown? survey-widget)
+         (combo-box id options)
+         (map (lambda (option)
+                `((input (@ (type ,(if multiple-choice?
+                                       "checkbox"
+                                       "radio"))
+                            (name ,id)
+                            (id ,id)
+                            ,(if (option-checked? id option multiple-choice?)
+                                 '(checked)
+                                 '())
+                            (value ,(option-hash id option)))
+                         ,option)
+                  (br)))
+              options)))))
 
 (define (render-text-box survey-widget)
   (let ((id (survey-widget-id survey-widget)))
-    (if (survey-widget-multiple-choice? survey-widget)
-        `(textarea (@ (name ,id)
-                      (id ,id))
-                   ,(or (answer-by-id id) ""))
-        `(input (@ (type "text")
-                   (name ,id)
-                   (id ,id)
-                   (value ,(or (answer-by-id id) "")))))))
+    (wrap-widget
+     id
+     (if (survey-widget-multiple-choice? survey-widget)
+         `(textarea (@ (name ,id)
+                       (id ,id))
+                    ,(or (answer-by-id id) ""))
+         `(input (@ (type "text")
+                    (name ,id)
+                    (id ,id)
+                    (value ,(or (answer-by-id id) ""))))))))
 
 (define (render-survey base-path)
   (let ((content

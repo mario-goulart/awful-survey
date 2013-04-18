@@ -6,7 +6,10 @@
 
 (survey
  (lambda ()
-   `((h2 "Select one of the available options")
+   `((h2 "Identification")
+     (p "Your name: " ,(text-box 'your-name))
+
+     (h2 "Select one of the available options")
      ,(single-choice/dropdown
        'example-single-choice-dropdown
        '("foo"
