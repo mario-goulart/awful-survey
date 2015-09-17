@@ -5,6 +5,8 @@
   survey
   survey-title
   survey-end
+  survey-data-dir
+  save-survey-answers
   multiple-choices
   single-choice
   single-choice/dropdown

@@ -23,6 +23,20 @@
      `(span (@ (class "missing-field"))
             ,widget-sxml))))
 
+(define survey-data-dir (make-parameter "data"))
+
+(define save-survey-answers
+  (make-parameter
+   (lambda (answers)
+     (let ((out-file
+            (make-pathname (survey-data-dir)
+                           (sprintf "~a-~a-~a.scm"
+                                    (remote-address)
+                                    (current-milliseconds)
+                                    (random 1000)))))
+       (with-output-to-file out-file
+         (lambda ()
+           (for-each pp answers)))))))
 
 ;; Internal parameters
 (define %survey-answers (make-parameter '()))
@@ -199,23 +213,12 @@
               #f
               (loop (cdr answers)))))))
 
-(define (save-survey-answers data-dir answers)
-  (let ((out-file
-         (make-pathname data-dir
-                        (sprintf "~a-~a-~a.scm"
-                                 (remote-address)
-                                 (current-milliseconds)
-                                 (random 1000)))))
-    (with-output-to-file out-file
-      (lambda ()
-        (for-each pp answers)))
-    (survey-end)))
 
-
-(define (awful-survey base-path survey-file data-dir
+(define (awful-survey base-path survey-file
                         #!key (awful-settings (lambda (_) (_))))
   (load survey-file)
-  (create-directory data-dir 'with-parents)
+  (when (survey-data-dir)
+    (create-directory (survey-data-dir) 'with-parents))
 
   (define-app awful-survey
     matcher: identity ;; FIXME
@@ -236,7 +239,7 @@
           (if (and (not (null? *survey-widgets*))
                    (form-submission-ok? answers))
               (begin
-                (save-survey-answers data-dir answers)
+                ((save-survey-answers) answers)
                 (render-survey-end))
               (parameterize ((%survey-answers answers))
                 (render-survey base-path)))))
