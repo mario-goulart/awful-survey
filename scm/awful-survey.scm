@@ -1,5 +1,5 @@
 (use awful spiffy simple-sha1 intarweb)
-(use data-structures srfi-1 srfi-13 extras posix files)
+(use data-structures srfi-1 srfi-13 extras irregex posix files)
 
 (define-record survey-widget
   id
@@ -221,7 +221,11 @@
     (create-directory (survey-data-dir) 'with-parents))
 
   (define-app awful-survey
-    matcher: identity ;; FIXME
+    matcher: (let ((base-regex
+                    (irregex (string-append (string-chomp base-path "/")
+                                            ".*"))))
+               (lambda (path)
+                 (irregex-match? base-regex path)))
     handler-hook: (lambda (continue)
                     (parameterize ((enable-sxml #t)
                                    (app-root-path base-path))
@@ -233,7 +237,7 @@
         title: (survey-title)
         method: method))
 
-    (define-survey-page base-path
+    (define-survey-page (main-page-path)
       (lambda ()
         (let ((answers (answers-from-request)))
           (if (and (not (null? *survey-widgets*))
