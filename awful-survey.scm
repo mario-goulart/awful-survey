@@ -13,5 +13,9 @@
   text-box
   text-box/multiline)
 
-(import chicken scheme)
+(import scheme)
+(cond-expand
+ (chicken-5
+  (import (chicken base)) ;; for include
+  ))
 (include "scm/awful-survey.scm"))

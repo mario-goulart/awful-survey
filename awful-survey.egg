@@ -1,0 +1,10 @@
+;;; awful-survey.egg -*- scheme -*-
+
+((synopsis "An awful app to make web surveys")
+ (author "Mario Domenech Goulart")
+ (license "BSD")
+ (category web)
+ (dependencies awful srfi-1 srfi-13)
+ (component-options
+  (csc-options "-O3" "-d1"))
+ (components (extension awful-survey)))

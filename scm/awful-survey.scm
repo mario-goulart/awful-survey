@@ -1,5 +1,21 @@
-(use awful spiffy simple-sha1 intarweb)
-(use data-structures srfi-1 srfi-13 extras irregex posix files)
+(cond-expand
+ (chicken-4
+  (use awful intarweb spiffy simple-sha1)
+  (use data-structures extras files irregex posix srfi-1 srfi-13)
+  (define pseudo-random-integer random))
+ (chicken-5
+  (import (chicken file)
+          (chicken format)
+          (chicken irregex)
+          (chicken pathname)
+          (chicken pretty-print)
+          (chicken random)
+          (chicken string)
+          (chicken time))
+  (import awful intarweb spiffy simple-sha1 srfi-1 srfi-13))
+ (else
+  (error "Unsupported CHICKEN version.")))
+
 
 (define-record survey-widget
   id
@@ -33,7 +49,7 @@
                            (sprintf "~a-~a-~a.scm"
                                     (remote-address)
                                     (current-milliseconds)
-                                    (random 1000)))))
+                                    (pseudo-random-integer 1000)))))
        (with-output-to-file out-file
          (lambda ()
            (for-each pp answers)))))))
