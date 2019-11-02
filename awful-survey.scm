@@ -15,7 +15,11 @@
 
 (import scheme)
 (cond-expand
+ (chicken-4
+  (import chicken))
  (chicken-5
-  (import (chicken base)) ;; for include
-  ))
+  (import (chicken base))) ;; for include
+ (else
+  (error "Unsupported CHICKEN version.")))
+
 (include "scm/awful-survey.scm"))
