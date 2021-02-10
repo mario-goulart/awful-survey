@@ -5,13 +5,16 @@
   survey
   survey-title
   survey-end
+  survey-blocked
   survey-data-dir
   save-survey-answers
   multiple-choices
   single-choice
   single-choice/dropdown
   text-box
-  text-box/multiline)
+  text-box/multiline
+  max-surveys/ip/time-window
+  allowed-to-answer-survey?)
 
 (import scheme)
 (cond-expand
@@ -23,6 +26,7 @@
  (chicken-5
   (import (chicken base)
           (chicken file)
+          (chicken file posix)
           (chicken format)
           (chicken irregex)
           (chicken pathname)
@@ -43,6 +47,12 @@
   options)
 
 ;; User configurable parameters
+
+(define max-surveys/ip/time-window
+  ;; Maximum number of surveys (car) per IP address in the time window
+  ;; in seconds (cdr).
+  (make-parameter '(100 . 3600)))
+
 (define survey (make-parameter '()))
 
 (define survey-title (make-parameter ""))
@@ -50,6 +60,12 @@
 (define survey-end
   (make-parameter
    '(p "Thanks for participating in the survey.")))
+
+(define survey-blocked
+  ;; What to render when an IP has reached max-surveys/ip/time-window.
+  (make-parameter
+   '(h1 (@ (id "survey-blocked"))
+        "You've already answered enough surveys.  Thanks.")))
 
 (define missing-field-highlighter
   (make-parameter
@@ -62,15 +78,31 @@
 (define save-survey-answers
   (make-parameter
    (lambda (answers)
-     (let ((out-file
-            (make-pathname (survey-data-dir)
-                           (sprintf "~a-~a-~a.scm"
-                                    (remote-address)
-                                    (current-milliseconds)
-                                    (pseudo-random-integer 1000)))))
+     (let* ((dir (make-pathname (survey-data-dir) (remote-address)))
+            (out-file
+             (make-pathname dir
+                            (sprintf "~a-~a-~a.scm"
+                                     (current-seconds)
+                                     (current-milliseconds)
+                                     (pseudo-random-integer 1000)))))
+       (create-directory dir 'with-parents)
        (with-output-to-file out-file
          (lambda ()
            (for-each pp answers)))))))
+
+(define allowed-to-answer-survey?
+  ;; Given an IP, return #t if it is allowed to answer the
+  ;; survey. Return #f otherwise.
+  (make-parameter
+   (lambda (ip)
+     (let* ((age-threshold (- (current-seconds)
+                              (cdr (max-surveys/ip/time-window))))
+            (recent-surveys
+             (filter
+              (lambda (survey-file)
+                (> (file-modification-time survey-file) age-threshold))
+              (glob (make-pathname (list (survey-data-dir) ip) "*.scm")))))
+       (<= (length recent-surveys) (car (max-surveys/ip/time-window)))))))
 
 ;; Internal parameters
 (define %survey-answers (make-parameter '()))
@@ -273,14 +305,16 @@
 
     (define-survey-page (main-page-path)
       (lambda ()
-        (let ((answers (answers-from-request)))
-          (if (and (not (null? *survey-widgets*))
-                   (form-submission-ok? answers))
-              (begin
-                ((save-survey-answers) answers)
-                (render-survey-end))
-              (parameterize ((%survey-answers answers))
-                (render-survey base-path)))))
+        (if ((allowed-to-answer-survey?) (remote-address))
+            (let ((answers (answers-from-request)))
+              (if (and (not (null? *survey-widgets*))
+                       (form-submission-ok? answers))
+                  (begin
+                    ((save-survey-answers) answers)
+                    (render-survey-end))
+                  (parameterize ((%survey-answers answers))
+                    (render-survey base-path))))
+            (survey-blocked)))
       method: '(get post head))
 
     ))
