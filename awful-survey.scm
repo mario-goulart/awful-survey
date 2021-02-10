@@ -308,6 +308,7 @@
         (if ((allowed-to-answer-survey?) (remote-address))
             (let ((answers (answers-from-request)))
               (if (and (not (null? *survey-widgets*))
+                       (eq? (request-method (current-request)) 'POST)
                        (form-submission-ok? answers))
                   (begin
                     ((save-survey-answers) answers)
