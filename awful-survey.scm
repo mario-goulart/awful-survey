@@ -16,6 +16,7 @@
 (import scheme)
 (cond-expand
  (chicken-4
+  (import chicken)
   (use awful intarweb spiffy simple-sha1)
   (use data-structures extras files irregex posix srfi-1 srfi-13)
   (define pseudo-random-integer random))
