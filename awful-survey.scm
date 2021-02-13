@@ -301,6 +301,8 @@
       (define-page matcher
         proc
         title: (survey-title)
+        headers: '(meta (@ (name "viewport")
+                           (content "width=device-width, initial-scale=1")))
         method: method))
 
     (define-survey-page (main-page-path)
